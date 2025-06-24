@@ -1,0 +1,10 @@
+falcon:
+  cid: DB0D9F7D5BC443CA8263AB926831B327-3B
+node:
+  backend: bpf
+  enabled: true
+  image:
+    pullPolicy: Always
+    registryConfigJSON: eyJhdXRocyI6IHsibG9jYWxob3N0OjUwMDAiOiB7fX19
+    repository: localhost:5000/falcon-sensor
+    tag: 7.26.0-17905-1.falcon-linux.Release.EU-1
