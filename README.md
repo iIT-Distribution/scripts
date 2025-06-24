@@ -7,7 +7,7 @@
 ### 🚀 Швидке розгортання Falcon Sensor в Kubernetes
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/iIT-Distribution/scripts/refs/heads/master/crowdstrike/cloud/deploy-sensors.sh | bash
+bash <(curl -sSL https://raw.githubusercontent.com/iIT-Distribution/scripts/refs/heads/master/crowdstrike/cloud/deploy-sensors.sh)
 ```
 
 **Що це робить:**

@@ -5,7 +5,7 @@
 ## Швидкий старт (одна команда)
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/iIT-Distribution/scripts/refs/heads/master/crowdstrike/cloud/deploy-sensors.sh | bash
+bash <(curl -sSL https://raw.githubusercontent.com/iIT-Distribution/scripts/refs/heads/master/crowdstrike/cloud/deploy-sensors.sh)
 ```
 
 Ця команда:
@@ -69,7 +69,7 @@ curl -sSL https://raw.githubusercontent.com/iIT-Distribution/scripts/refs/heads/
 
 ### 1. Швидкий старт (рекомендований):
 ```bash
-curl -sSL https://raw.githubusercontent.com/iIT-Distribution/scripts/refs/heads/master/crowdstrike/cloud/deploy-sensors.sh | bash
+bash <(curl -sSL https://raw.githubusercontent.com/iIT-Distribution/scripts/refs/heads/master/crowdstrike/cloud/deploy-sensors.sh)
 ```
 
 ### 2. З environment variables:
@@ -80,7 +80,7 @@ export FALCON_CLIENT_SECRET="your_client_secret"
 export LOCAL_REGISTRY="harbor.company.com"
 export FALCON_IMAGE_TAG="latest"
 
-curl -sSL https://raw.githubusercontent.com/iIT-Distribution/scripts/refs/heads/master/crowdstrike/cloud/deploy-sensors.sh | bash
+bash <(curl -sSL https://raw.githubusercontent.com/iIT-Distribution/scripts/refs/heads/master/crowdstrike/cloud/deploy-sensors.sh)
 ```
 
 ### 3. Локальне використання (для розробки):
