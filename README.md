@@ -1,59 +1,58 @@
- # iIT Distribution Scripts
+# iIT Distribution Scripts
 
-Колекція корисних скриптів для системного адміністрування та DevOps завдань.
+Collection of useful scripts for system administration and DevOps tasks.
 
 ## 🛡️ CrowdStrike Falcon
 
-### 🚀 Швидке розгортання Falcon Sensor в Kubernetes
+### 🚀 Quick Falcon Sensor Deployment to Kubernetes
 
 ```bash
 bash <(curl -sSL https://raw.githubusercontent.com/iIT-Distribution/scripts/refs/heads/master/crowdstrike/cloud/deploy-sensors.sh)
 ```
 
-**Що це робить:**
-- Автоматично підготовлює розгортання CrowdStrike Falcon sensor через Helm
-- Завантажує образи з CrowdStrike registry в ваш локальний registry
-- Генерує правильні конфігураційні файли та команди
-- Повністю відповідає офіційній документації CrowdStrike
+**What this does:**
+- Automatically prepares CrowdStrike Falcon sensor deployment via Helm
+- Downloads images from CrowdStrike registry to your local registry
+- Generates correct configuration files and commands
+- Fully compliant with official CrowdStrike documentation
 
-📚 **Детальна документація:** [crowdstrike/cloud/README.md](crowdstrike/cloud/README.md)
+📚 **Detailed documentation:** [crowdstrike/cloud/README.md](crowdstrike/cloud/README.md)
 
-### 🔍 Інші CrowdStrike утиліти
+### 🔍 Other CrowdStrike Utilities
 
-- **`crowdstrike/check-usermode.sh`** - Перевірка usermode sensor статусу
+- **`crowdstrike/check-usermode.sh`** - Check usermode sensor status
 
-## 📁 Структура репозиторію
+## 📁 Repository Structure
 
 ```
 scripts/
-├── crowdstrike/           # CrowdStrike Falcon утиліти
-│   ├── cloud/            # Kubernetes/Cloud розгортання
+├── crowdstrike/           # CrowdStrike Falcon utilities
+│   ├── cloud/            # Kubernetes/Cloud deployment
 │   │   ├── deploy-sensors.sh
 │   │   ├── sensor-helm-install.py
 │   │   └── README.md
-│   └── check-usermode.sh # Перевірка usermode
-├── LICENSE              # Apache 2.0 ліцензія
-└── README.md            # Цей файл
+│   └── check-usermode.sh # Usermode check
+├── LICENSE              # Apache 2.0 license
+└── README.md            # This file
 ```
 
-## 🤝 Внесок
+## 🤝 Contributing
 
-Якщо ви хочете внести зміни:
+If you want to contribute:
 
-1. Форкніть репозиторій
-2. Створіть feature branch
-3. Зробіть ваші зміни
-4. Відправте pull request
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Submit a pull request
 
-## 📄 Ліцензія
+## 📄 License
 
-Apache License 2.0 - дивіться [LICENSE](LICENSE) файл для деталей.
+Apache License 2.0 - see [LICENSE](LICENSE) file for details.
 
-## ⚠️ Важливо
+## ⚠️ Important
 
-- Всі скрипти призначені для використання досвідченими системними адміністраторами
-- Завжди перевіряйте скрипти перед виконанням у продакшн середовищі
-- Використовуйте на власний ризик
+- Always review scripts before running in production environments
+- Use at your own risk
 
 ---
 
