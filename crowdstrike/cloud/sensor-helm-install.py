@@ -666,6 +666,12 @@ def main() -> None:
 
     helm_cmd = f"helm install falcon-sensor crowdstrike/falcon-sensor -n {cfg.namespace} --create-namespace -f {out_path}"
 
+    verification_commands = [
+        f"kubectl get pods -n {cfg.namespace}",
+        f"kubectl get daemonset -n {cfg.namespace}",
+        f"kubectl logs -n {cfg.namespace} -l app.kubernetes.io/name=falcon-sensor --tail=50"
+    ]
+
     console.print("\n[bold blue]Step 1: Create namespace and set pod security labels[/bold blue]")
     for cmd in namespace_commands:
         console.print(f"{cmd}")
@@ -673,7 +679,11 @@ def main() -> None:
     console.print(f"\n[bold blue]Step 2: Deploy the Falcon sensor[/bold blue]")
     console.print(f"{helm_cmd}")
 
-    all_commands = "\n".join(namespace_commands + ["", helm_cmd])
+    console.print(f"\n[bold blue]Step 3: Verify installation[/bold blue]")
+    for cmd in verification_commands:
+        console.print(f"{cmd}")
+
+    all_commands = "\n".join(namespace_commands + ["", helm_cmd, ""] + ["# " + cmd for cmd in verification_commands])
     if shutil.which("pbcopy"):
         subprocess.run("pbcopy", input=all_commands, text=True)
         console.print("[grey]All commands copied to clipboard.[/grey]")

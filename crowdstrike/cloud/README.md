@@ -112,6 +112,7 @@ python3 sensor-helm-install.py
 8. **Outputs deployment commands:**
    - Namespace creation with pod security labels
    - Helm install command with all necessary parameters
+   - Verification commands to check installation status
 9. **Cleans up temporary files** after successful completion
 
 ## Example Output
@@ -127,6 +128,11 @@ kubectl label ns --overwrite falcon-system pod-security.kubernetes.io/warn=privi
 
 # Step 2: Deploy the Falcon sensor  
 helm install falcon-sensor crowdstrike/falcon-sensor -n falcon-system --create-namespace -f /tmp/iitd-csf/falcon-values.yml
+
+# Step 3: Verify installation
+# kubectl get pods -n falcon-system
+# kubectl get daemonset -n falcon-system
+# kubectl logs -n falcon-system -l app.kubernetes.io/name=falcon-sensor --tail=50
 ```
 
 ## Generated values.yaml Structure
