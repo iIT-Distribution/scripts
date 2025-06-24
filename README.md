@@ -22,28 +22,6 @@ curl -sSL https://raw.githubusercontent.com/iIT-Distribution/scripts/refs/heads/
 
 - **`crowdstrike/check-usermode.sh`** - Перевірка usermode sensor статусу
 
-## 📋 Вимоги
-
-- **Linux/macOS** з bash
-- **Python 3.8+** з pip
-- **curl** для завантаження скриптів
-- **Docker** (для CrowdStrike утиліт)
-- **kubectl** і **helm** (для Kubernetes розгортання)
-
-## 🔧 Використання
-
-### Одноразове виконання
-```bash
-curl -sSL https://raw.githubusercontent.com/iIT-Distribution/scripts/refs/heads/master/path/to/script.sh | bash
-```
-
-### Локальне клонування
-```bash
-git clone https://github.com/iIT-Distribution/scripts.git
-cd scripts
-# Виконати потрібний скрипт
-```
-
 ## 📁 Структура репозиторію
 
 ```
@@ -53,10 +31,8 @@ scripts/
 │   │   ├── deploy-sensors.sh
 │   │   ├── sensor-helm-install.py
 │   │   └── README.md
-│   └── check-usermode.sh # Перевірка usermode sensor
-├── docs_orig/            # Оригінальна документація  
-├── requirements.txt      # Python залежності
-├── LICENSE              # MIT ліцензія
+│   └── check-usermode.sh # Перевірка usermode
+├── LICENSE              # Apache 2.0 ліцензія
 └── README.md            # Цей файл
 ```
 
@@ -71,7 +47,7 @@ scripts/
 
 ## 📄 Ліцензія
 
-MIT License - дивіться [LICENSE](LICENSE) файл для деталей.
+Apache License 2.0 - дивіться [LICENSE](LICENSE) файл для деталей.
 
 ## ⚠️ Важливо
 
@@ -81,4 +57,4 @@ MIT License - дивіться [LICENSE](LICENSE) файл для деталей
 
 ---
 
-**iIT Distribution Team** | 2024
+**iIT Distribution** | 2025

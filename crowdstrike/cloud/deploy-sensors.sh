@@ -1,4 +1,17 @@
 #!/bin/bash
+# Copyright 2025 iIT Distribution
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 set -e
 
@@ -39,7 +52,7 @@ echo "✅ Python $PYTHON_VERSION found"
 # Download the script if it doesn't exist
 SCRIPT_PATH="$WORK_DIR/$SCRIPT_NAME"
 if [ ! -f "$SCRIPT_PATH" ]; then
-    echo "📥 Downloading $SCRIPT_NAME to $SCRIPT_PATH..."
+    echo "📥 Downloading installer..."
     if command -v curl &> /dev/null; then
         curl -sSL "$SCRIPT_URL" -o "$SCRIPT_PATH"
     elif command -v wget &> /dev/null; then
@@ -50,7 +63,7 @@ if [ ! -f "$SCRIPT_PATH" ]; then
         echo "  $SCRIPT_URL"
         exit 1
     fi
-    echo "✅ Script downloaded to $SCRIPT_PATH"
+    echo "✅ Installer downloaded to $SCRIPT_PATH"
 fi
 
 # Make script executable
