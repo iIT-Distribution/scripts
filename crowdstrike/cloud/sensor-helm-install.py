@@ -24,6 +24,7 @@ Features:
 """
 from __future__ import annotations
 
+import argparse
 import base64
 import json
 import os
@@ -33,6 +34,7 @@ import sys
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Any, Dict, Optional
+from subprocess import DEVNULL
 
 import requests
 import yaml
@@ -42,7 +44,8 @@ from rich.prompt import Confirm, Prompt
 from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 
 console = Console()
-CONFIG_FILE = Path("/tmp/iitd-csf/falcon-sensor-config.json")
+CONFIG_DIR = Path.home() / ".config" / "iitd" / "csf"
+CONFIG_FILE = CONFIG_DIR / "falcon-sensor-config.json"
 
 
 @dataclass
@@ -78,6 +81,16 @@ class FalconConfig:
             
         values.update(self.extra_values)
         return values
+
+
+def version_to_tuple(v: str) -> tuple[int, ...]:
+    """Converts a version string to a tuple of integers for comparison."""
+    try:
+        # Handle potential version suffixes like "-rev1" by splitting them off
+        return tuple(map(int, v.split('-')[0].split('.')))
+    except (ValueError, AttributeError):
+        # Return a low version number if parsing fails
+        return (0,)
 
 
 def run(cmd: list[str] | str, capture: bool = True) -> subprocess.CompletedProcess:
@@ -326,22 +339,74 @@ def get_registry_credentials(oauth_token: str, api_base: str, cid: str) -> tuple
         sys.exit(1)
 
 
-def download_and_push_image(config: 'FalconConfig') -> tuple[str, str]:
+def get_latest_image_tag(cs_registry: str, cloud_tag: str, cs_username: str, cs_password: str) -> Optional[str]:
+    """Queries the CrowdStrike registry to find the latest versioned sensor tag."""
+    tags_url = f"https://{cs_registry}/v2/falcon-sensor/{cloud_tag}/release/falcon-sensor/tags/list"
+    console.print(f"🔍 Querying for latest sensor version...")
+    try:
+        tag_response = requests.get(tags_url, auth=(cs_username, cs_password), timeout=30)
+        
+        if tag_response.status_code != 200:
+            console.print(f"[yellow]⚠️  Failed to get image tags (HTTP {tag_response.status_code})[/yellow]")
+            return None
+
+        tags_data = tag_response.json()
+        tags = tags_data.get("tags", [])
+        if not tags:
+            console.print("[yellow]⚠️  No tags found in registry response.[/yellow]")
+            return None
+
+        versioned_tags = sorted(
+            [t for t in tags if t != "latest" and t[0].isdigit()], 
+            key=version_to_tuple, 
+            reverse=True
+        )
+        
+        if versioned_tags:
+            return versioned_tags[0]
+        else:
+            console.print("[yellow]⚠️  No versioned tags found.[/yellow]")
+            return None
+            
+    except requests.RequestException as e:
+        console.print(f"[yellow]⚠️  Failed to fetch image tags: {e}[/yellow]")
+        return None
+    except Exception as e:
+        console.print(f"[yellow]⚠️  Unexpected error getting tags: {e}[/yellow]")
+        return None
+
+
+def check_helm_release_exists(release_name: str, namespace: str) -> bool:
+    """Checks if a Helm release exists in a given namespace."""
+    try:
+        subprocess.run(
+            ["helm", "status", release_name, "-n", namespace],
+            check=True, stdout=DEVNULL, stderr=DEVNULL
+        )
+        return True
+    except subprocess.CalledProcessError:
+        return False
+
+
+def get_installed_image_tag(release_name: str, namespace: str) -> Optional[str]:
+    """Gets the deployed image tag from a Helm release."""
+    try:
+        cp = run(["helm", "get", "values", release_name, "-n", namespace, "-o", "json"], capture=True)
+        values = json.loads(cp.stdout)
+        return values.get("node", {}).get("image", {}).get("tag")
+    except (subprocess.CalledProcessError, json.JSONDecodeError, KeyError):
+        console.print(f"[yellow]⚠️  Could not retrieve installed image tag for {release_name}[/yellow]")
+        return None
+
+
+def download_and_push_image(config: 'FalconConfig', oauth_token: str, cs_username: str, cs_password: str) -> tuple[str, str]:
     api_base, cloud_tag, cs_registry = get_cloud_api_config(config.cloud_region)
     
     with Progress(
         SpinnerColumn(), TextColumn("[progress.description]{task.description}"),
         BarColumn(), TimeElapsedColumn(), console=console, transient=True,
     ) as progress:
-        task = progress.add_task("Downloading and pushing image", total=6)
-        
-        progress.update(task, description="Getting OAuth token...")
-        oauth_token = get_oauth_token(config.client_id, config.client_secret, api_base)
-        progress.advance(task)
-        
-        progress.update(task, description="Getting registry credentials...")
-        cs_username, cs_password = get_registry_credentials(oauth_token, api_base, config.cid)
-        progress.advance(task)
+        task = progress.add_task("Downloading and pushing image", total=4)
         
         progress.update(task, description="Getting registry API token...")
         registry_token = get_registry_token(oauth_token, api_base, config.cid, cs_registry, cloud_tag)
@@ -362,48 +427,8 @@ def download_and_push_image(config: 'FalconConfig') -> tuple[str, str]:
         progress.advance(task)
         
         cs_image = f"{cs_registry}/falcon-sensor/{cloud_tag}/release/falcon-sensor"
-        progress.update(task, description="Downloading image from CrowdStrike...")
+        progress.update(task, description=f"Downloading image [bold]{config.image_tag}[/bold] from CrowdStrike...")
         try:
-            if config.image_tag == "latest":
-                if registry_token:
-                    auth_header = {"Authorization": f"Bearer {registry_token}"}
-                else:
-                    auth_header = {}
-                    
-                tags_url = f"https://{cs_registry}/v2/falcon-sensor/{cloud_tag}/release/falcon-sensor/tags/list"
-                
-                try:
-                    if registry_token:
-                        tag_response = requests.get(tags_url, headers=auth_header, timeout=30)
-                    else:
-                        tag_response = requests.get(tags_url, auth=(cs_username, cs_password), timeout=30)
-                        
-                    if tag_response.status_code == 200:
-                        tags_data = tag_response.json()
-                        tags = tags_data.get("tags", [])
-                        if tags:
-                            if "latest" not in tags:
-                                versioned_tags = sorted([t for t in tags if t != "latest"], reverse=True)
-                                if versioned_tags:
-                                    config.image_tag = versioned_tags[0]
-                                    console.print(f"[yellow]⚠️  'latest' tag not found, using newest available: {config.image_tag}[/yellow]")
-                                else:
-                                    console.print(f"[yellow]⚠️  No versioned tags found, will try 'latest' anyway[/yellow]")
-                        else:
-                            console.print(f"[yellow]⚠️  No tags found in registry response, using 'latest'[/yellow]")
-                    else:
-                        console.print(f"[yellow]⚠️  Failed to get image tags (HTTP {tag_response.status_code})[/yellow]")
-                        console.print(f"[yellow]Tags URL: {tags_url}[/yellow]")
-                        console.print(f"[yellow]Response: {tag_response.text[:200]}...[/yellow]")
-                        console.print(f"[yellow]Using default tag 'latest'[/yellow]")
-                except requests.RequestException as e:
-                    console.print(f"[yellow]⚠️  Failed to fetch image tags: {e}[/yellow]")
-                    console.print(f"[yellow]Tags URL: {tags_url}[/yellow]")
-                    console.print(f"[yellow]Using default tag 'latest'[/yellow]")
-                except Exception as e:
-                    console.print(f"[yellow]⚠️  Unexpected error getting tags: {e}[/yellow]")
-                    console.print(f"[yellow]Using default tag 'latest'[/yellow]")
-            
             full_cs_image = f"{cs_image}:{config.image_tag}"
             run(["docker", "pull", full_cs_image], capture=True)
         except subprocess.CalledProcessError as e:
@@ -446,7 +471,7 @@ def download_and_push_image(config: 'FalconConfig') -> tuple[str, str]:
             sys.exit(1)
         progress.advance(task)
         
-        progress.update(task, description="✅ Image download and push completed", completed=6)
+        progress.update(task, description="✅ Image download and push completed", completed=4)
         progress.stop_task(task)
     
     console.print(f"[green]✅ Image successfully downloaded and pushed to {local_full_image}[/green]")
@@ -478,16 +503,24 @@ def generate_pull_token(local_registry: str) -> str:
         return ""
 
 
-def save_config_to_file(config: FalconConfig) -> None:
+def save_config_to_file(config: FalconConfig, save_sensitive: bool = True) -> None:
     try:
-        CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
         config_dict = asdict(config)
-        config_dict["client_secret"] = ""
+        
+        if not save_sensitive:
+            config_dict["client_secret"] = ""
+        
+        # Registry token is always cleared for security
         config_dict["registry_token"] = ""
         
         with open(CONFIG_FILE, 'w') as f:
             json.dump(config_dict, f, indent=2)
-        console.print(f"[green]✅ Configuration saved to {CONFIG_FILE}[/green]")
+        
+        if save_sensitive:
+            console.print(f"[green]✅ Configuration saved to {CONFIG_FILE} (including sensitive data)[/green]")
+        else:
+            console.print(f"[green]✅ Configuration saved to {CONFIG_FILE} (sensitive data excluded)[/green]")
     except Exception as e:
         console.print(f"[yellow]⚠️  Failed to save configuration: {e}[/yellow]")
 
@@ -516,7 +549,11 @@ def display_saved_config(config: FalconConfig) -> None:
     console.print(f"[cyan]Image Tag:[/cyan] {config.image_tag}")
     console.print(f"[cyan]Namespace:[/cyan] {config.namespace}")
     console.print(f"[cyan]Backend:[/cyan] {config.backend}")
-    console.print(f"[yellow]Note: Client secret will need to be re-entered for security.[/yellow]")
+    
+    if config.client_secret:
+        console.print(f"[green]✅ Client secret is saved[/green]")
+    else:
+        console.print(f"[yellow]⚠️  Client secret is not saved (will need to be entered)[/yellow]")
 
 
 def check_and_load_existing_config() -> Optional[FalconConfig]:
@@ -537,22 +574,28 @@ def check_and_load_existing_config() -> Optional[FalconConfig]:
             pass
         return None
     
-    console.print("\n[yellow]Please re-enter sensitive information:[/yellow]")
-    saved_config.client_secret = Prompt.ask(
-        "Falcon API [bold]client_secret[/]", 
-        default=os.getenv("FALCON_CLIENT_SECRET", ""), 
-        password=True
-    ).strip()
-    
+    # Check if client_secret is already saved
     if not saved_config.client_secret:
-        console.print("[red]❌ Client secret is required[/red]")
-        return None
+        console.print("\n[yellow]Please enter the client secret (not saved in configuration):[/yellow]")
+        saved_config.client_secret = Prompt.ask(
+            "Falcon API [bold]client_secret[/]", 
+            default=os.getenv("FALCON_CLIENT_SECRET", ""), 
+            password=True
+        ).strip()
+        
+        if not saved_config.client_secret:
+            console.print("[red]❌ Client secret is required[/red]")
+            return None
+    else:
+        console.print("[green]✅ Using saved client secret[/green]")
     
     return saved_config
 
 
 def wizard() -> FalconConfig:
     console.print(Panel("Installation wizard", style="bold cyan"))
+    console.print(f"[dim]Configuration will be saved to: {CONFIG_FILE}[/dim]")
+    console.print()
 
     cid = Prompt.ask("CrowdStrike [bold]CID[/] (with checksum)", default=os.getenv("FALCON_CID", "")).strip()
     if not cid:
@@ -596,7 +639,81 @@ def wizard() -> FalconConfig:
     )
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Interactive helper for preparing CrowdStrike Falcon sensor Helm deployment",
+        epilog=f"Configuration is stored in: {CONFIG_FILE}"
+    )
+    parser.add_argument(
+        "--no-sensitive",
+        action="store_true",
+        help="Do not save sensitive information (client_secret) to configuration file. "
+             "Use this for shared systems or CI/CD environments."
+    )
+    parser.add_argument(
+        "--uninstall",
+        action="store_true",
+        help="Uninstall the Falcon sensor and clean up resources."
+    )
+    return parser.parse_args()
+
+
+def uninstall_wizard() -> None:
+    """Interactive wizard to uninstall the Falcon sensor and related resources."""
+    console.print(Panel("Falcon Sensor Uninstaller", style="bold red"))
+
+    cfg = load_config_from_file()
+    namespace = "falcon-system"
+    if cfg:
+        namespace = cfg.namespace
+        console.print(f"Loaded configuration. Using namespace: [cyan]{namespace}[/cyan]")
+    else:
+        console.print("[yellow]No saved configuration found.[/yellow]")
+        namespace = Prompt.ask("Please enter the namespace where the sensor is installed", default="falcon-system")
+
+    if not check_helm_release_exists("falcon-sensor", namespace):
+        console.print(f"[red]❌ No active 'falcon-sensor' release found in namespace '{namespace}'.[/red]")
+        sys.exit(1)
+
+    console.print(f"\nThis will uninstall the 'falcon-sensor' Helm release from the '[bold]{namespace}[/bold]' namespace.")
+    if not Confirm.ask("Are you sure you want to proceed?", default=False):
+        console.print("Uninstall cancelled.")
+        sys.exit(0)
+
+    try:
+        console.print(f"🗑️ Uninstalling Helm release 'falcon-sensor' from namespace '{namespace}'...")
+        run(["helm", "uninstall", "falcon-sensor", "-n", namespace], capture=False)
+        console.print("[green]✅ Helm release uninstalled successfully.[/green]")
+    except subprocess.CalledProcessError as e:
+        console.print(f"[red]❌ Failed to uninstall Helm release: {e}[/red]")
+        sys.exit(1)
+
+    if Confirm.ask(f"\nDo you want to delete the Kubernetes namespace '[bold]{namespace}[/bold]'?", default=False):
+        try:
+            console.print(f"🗑️ Deleting namespace '{namespace}'...")
+            run(["kubectl", "delete", "namespace", namespace], capture=False)
+            console.print(f"[green]✅ Namespace '{namespace}' deleted.[/green]")
+        except subprocess.CalledProcessError as e:
+            console.print(f"[red]❌ Failed to delete namespace: {e}[/red]")
+
+    if CONFIG_FILE.exists():
+        if Confirm.ask(f"\nDo you want to remove the configuration file at '[bold]{CONFIG_FILE}[/bold]'?", default=False):
+            try:
+                CONFIG_FILE.unlink()
+                console.print("[green]✅ Configuration file removed.[/green]")
+            except OSError as e:
+                console.print(f"[red]❌ Failed to remove configuration file: {e}[/red]")
+
+    console.print("\n[bold]Uninstallation complete.[/bold]")
+
+
 def main() -> None:
+    args = parse_args()
+
+    if args.uninstall:
+        uninstall_wizard()
+        sys.exit(0)
+    
     if shutil.which("docker") is None:
         console.print("\n[red bold]❌ Docker is required for image operations.[/red bold]")
         sys.exit(1)
@@ -626,45 +743,90 @@ def main() -> None:
 
     console.print("[yellow]Setting up CrowdStrike Helm repository...[/yellow]")
     setup_helm_repo()
-
     console.print()
     
+    # --- Load config or run wizard ---
     cfg = check_and_load_existing_config()
-    if cfg is None:
+    if cfg:
+        is_new_install = not check_helm_release_exists("falcon-sensor", cfg.namespace)
+        if is_new_install:
+            console.print("[yellow]⚠️  Config file found, but no release in cluster. Treating as new install.[/yellow]")
+    else:
         cfg = wizard()
-        save_config_to_file(cfg)
+        is_new_install = True
+
+    # --- Authenticate with CrowdStrike API ---
+    api_base, cloud_tag, cs_registry = get_cloud_api_config(cfg.cloud_region)
+    oauth_token = get_oauth_token(cfg.client_id, cfg.client_secret, api_base)
+    cs_username, cs_password = get_registry_credentials(oauth_token, api_base, cfg.cid)
+    
+    target_tag = cfg.image_tag
+
+    # --- Installation vs. Update Logic ---
+    if is_new_install:
+        console.print("\n[cyan]🚀 Starting new installation...[/cyan]")
+        if target_tag == "latest":
+            latest_tag = get_latest_image_tag(cs_registry, cloud_tag, cs_username, cs_password)
+            if latest_tag:
+                target_tag = latest_tag
+                console.print(f"Using latest version: [bold green]{target_tag}[/bold green]")
+            else:
+                console.print("[red]❌ Could not resolve 'latest' tag. Please specify a version manually.[/red]")
+                sys.exit(1)
+    else:  # Update path
+        console.print("\n[cyan]🔄 Checking for updates to existing installation...[/cyan]")
+        installed_tag = get_installed_image_tag("falcon-sensor", cfg.namespace)
+        if not installed_tag:
+            console.print("[red]❌ Could not determine installed version. Exiting.[/red]")
+            sys.exit(1)
+        
+        console.print(f"Installed version: [bold]{installed_tag}[/bold]")
+        latest_tag = get_latest_image_tag(cs_registry, cloud_tag, cs_username, cs_password)
+        if not latest_tag:
+            console.print("[yellow]⚠️  Could not determine latest available version. Cannot check for updates.[/yellow]")
+            sys.exit(1)
+            
+        console.print(f"Latest available version: [bold green]{latest_tag}[/bold green]")
+        
+        if version_to_tuple(latest_tag) <= version_to_tuple(installed_tag):
+             console.print("\n[green]✅ You are running the latest version.[/green]")
+             sys.exit(0)
+             
+        update = Confirm.ask(f"Do you want to upgrade from [bold yellow]{installed_tag}[/bold yellow] to [bold green]{latest_tag}[/bold green]?", default=True)
+        if not update:
+            console.print("Update cancelled by user.")
+            sys.exit(0)
+        
+        target_tag = latest_tag
+
+    # --- Common logic for both install and update ---
+    cfg.image_tag = target_tag
     
     network_ok = check_network_connectivity(cfg.cloud_region)
-    
     if not network_ok:
         console.print(f"\n[red bold]❌ Network connectivity issues prevent proceeding.[/red bold]")
         console.print(f"[yellow]Please check your firewall, proxy settings, and network access to CrowdStrike services.[/yellow]")
         console.print(f"[yellow]Required domains for {cfg.cloud_region.upper()} region are listed above.[/yellow]")
         sys.exit(1)
 
-    local_image_repo, actual_tag = download_and_push_image(cfg)
+    local_image_repo, actual_tag = download_and_push_image(cfg, oauth_token, cs_username, cs_password)
     cfg.image_repo = local_image_repo
     cfg.image_tag = actual_tag
 
+    console.print()
+    save_config_to_file(cfg, save_sensitive=not args.no_sensitive)
     console.print()
     
     cfg.registry_token = generate_pull_token(cfg.local_registry)
 
     values_yaml = yaml.dump(cfg.to_values_dict(), default_flow_style=False)
 
-    out_path = Path(Prompt.ask("Write [bold]values.yml[/] to", default=str(Path("/tmp/iitd-csf") / "falcon-values.yml")))
+    out_path = Path(Prompt.ask("Write [bold]values.yml[/] to", default=str(CONFIG_DIR / "falcon-values.yml")))
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(values_yaml)
     console.print(Panel(f"values.yml written to [green]{out_path}[/green]", title="✅ Success", style="green"))
 
-    namespace_commands = [
-        f"kubectl create namespace {cfg.namespace}",
-        f"kubectl label ns --overwrite {cfg.namespace} pod-security.kubernetes.io/enforce=privileged",
-        f"kubectl label ns --overwrite {cfg.namespace} pod-security.kubernetes.io/audit=privileged", 
-        f"kubectl label ns --overwrite {cfg.namespace} pod-security.kubernetes.io/warn=privileged"
-    ]
-
-    helm_cmd = f"helm install falcon-sensor crowdstrike/falcon-sensor -n {cfg.namespace} --create-namespace -f {out_path}"
+    helm_cmd = f"helm upgrade --install falcon-sensor crowdstrike/falcon-sensor -n {cfg.namespace} --create-namespace -f {out_path}"
 
     verification_commands = [
         f"kubectl get pods -n {cfg.namespace}",
@@ -672,24 +834,43 @@ def main() -> None:
         f"kubectl logs -n {cfg.namespace} -l app.kubernetes.io/name=falcon-sensor --tail=50"
     ]
 
-    console.print("\n[bold blue]Step 1: Create namespace and set pod security labels[/bold blue]")
-    for cmd in namespace_commands:
-        console.print(f"{cmd}")
+    all_commands = []
+    step = 1
 
-    console.print(f"\n[bold blue]Step 2: Deploy the Falcon sensor[/bold blue]")
+    if is_new_install:
+        namespace_commands = [
+            f"kubectl create namespace {cfg.namespace}",
+            f"kubectl label ns --overwrite {cfg.namespace} pod-security.kubernetes.io/enforce=privileged",
+            f"kubectl label ns --overwrite {cfg.namespace} pod-security.kubernetes.io/audit=privileged", 
+            f"kubectl label ns --overwrite {cfg.namespace} pod-security.kubernetes.io/warn=privileged"
+        ]
+        console.print(f"\n[bold blue]Step {step}: Create namespace and set pod security labels[/bold blue]")
+        for cmd in namespace_commands:
+            console.print(f"{cmd}")
+        all_commands.extend(namespace_commands)
+        all_commands.append("")
+        step += 1
+
+    deploy_verb = "Deploy" if is_new_install else "Upgrade"
+    console.print(f"\n[bold blue]Step {step}: {deploy_verb} the Falcon sensor[/bold blue]")
     console.print(f"{helm_cmd}")
+    all_commands.append(helm_cmd)
+    all_commands.append("")
+    step += 1
 
-    console.print(f"\n[bold blue]Step 3: Verify installation[/bold blue]")
+    console.print(f"\n[bold blue]Step {step}: Verify installation[/bold blue]")
     for cmd in verification_commands:
         console.print(f"{cmd}")
 
-    all_commands = "\n".join(namespace_commands + ["", helm_cmd, ""] + ["# " + cmd for cmd in verification_commands])
+    all_commands.extend(["# " + cmd for cmd in verification_commands])
+
+    all_commands_str = "\n".join(all_commands)
     if shutil.which("pbcopy"):
-        subprocess.run("pbcopy", input=all_commands, text=True)
-        console.print("[grey]All commands copied to clipboard.[/grey]")
+        subprocess.run("pbcopy", input=all_commands_str, text=True)
+        console.print("\n[grey]All commands copied to clipboard.[/grey]")
     elif shutil.which("xclip"):
-        subprocess.run(["xclip", "-selection", "clipboard"], input=all_commands, text=True)
-        console.print("[grey]All commands copied to clipboard.[/grey]")
+        subprocess.run(["xclip", "-selection", "clipboard"], input=all_commands_str, text=True)
+        console.print("\n[grey]All commands copied to clipboard.[/grey]")
 
 
 if __name__ == "__main__":

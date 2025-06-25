@@ -18,7 +18,7 @@ set -e
 # Change to /tmp/iitd-csf directory for all operations
 WORK_DIR="/tmp/iitd-csf"
 mkdir -p "$WORK_DIR"
-cd "$WORK_DIR"
+# cd "$WORK_DIR"
 
 SCRIPT_NAME="sensor-helm-install.py"
 SCRIPT_URL="https://raw.githubusercontent.com/iIT-Distribution/scripts/refs/heads/master/crowdstrike/cloud/sensor-helm-install.py"
@@ -49,21 +49,27 @@ fi
 
 echo "✅ Python $PYTHON_VERSION found"
 
-# Download the script if it doesn't exist
-SCRIPT_PATH="$WORK_DIR/$SCRIPT_NAME"
-if [ ! -f "$SCRIPT_PATH" ]; then
-    echo "📥 Downloading installer..."
-    if command -v curl &> /dev/null; then
-        curl -sSL "$SCRIPT_URL" -o "$SCRIPT_PATH"
-    elif command -v wget &> /dev/null; then
-        wget -q "$SCRIPT_URL" -O "$SCRIPT_PATH"
-    else
-        echo "❌ Neither curl nor wget found"
-        echo "Please install curl or wget, or download the script manually:"
-        echo "  $SCRIPT_URL"
-        exit 1
+# check if script is in the current directory, and if it, use it
+if [ -f "$SCRIPT_NAME" ]; then
+    echo "✅ Script $SCRIPT_NAME found in current directory"
+    SCRIPT_PATH="$SCRIPT_NAME"
+else
+    # Download the script if it doesn't exist
+    SCRIPT_PATH="$WORK_DIR/$SCRIPT_NAME"
+    if [ ! -f "$SCRIPT_PATH" ]; then
+        echo "📥 Downloading installer..."
+        if command -v curl &> /dev/null; then
+            curl -sSL "$SCRIPT_URL" -o "$SCRIPT_PATH"
+        elif command -v wget &> /dev/null; then
+            wget -q "$SCRIPT_URL" -O "$SCRIPT_PATH"
+        else
+            echo "❌ Neither curl nor wget found"
+            echo "Please install curl or wget, or download the script manually:"
+            echo "  $SCRIPT_URL"
+            exit 1
+        fi
+        echo "✅ Installer downloaded to $SCRIPT_PATH"
     fi
-    echo "✅ Installer downloaded to $SCRIPT_PATH"
 fi
 
 # Make script executable
