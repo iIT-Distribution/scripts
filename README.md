@@ -1,59 +1,31 @@
 # iIT Distribution Scripts
 
-Collection of useful scripts for system administration and DevOps tasks.
+A collection of curated, reusable scripts for system administration and DevOps tasks, designed to automate common workflows and improve efficiency.
 
-## 🛡️ CrowdStrike Falcon
+## 🚀 Featured: CrowdStrike Falcon Kubernetes Helper
 
-### 🚀 Quick Falcon Sensor Deployment to Kubernetes
+Quickly prepare a CrowdStrike Falcon Sensor deployment for your Kubernetes cluster with our interactive helper. It handles the full lifecycle: installation, upgrades, and uninstallation.
 
 ```bash
 bash <(curl -sSL https://raw.githubusercontent.com/iIT-Distribution/scripts/refs/heads/master/crowdstrike/cloud/deploy-sensors.sh)
 ```
 
-**What this does:**
-- Automatically prepares CrowdStrike Falcon sensor deployment via Helm
-- Downloads images from CrowdStrike registry to your local registry
-- Generates correct configuration files and commands
-- Fully compliant with official CrowdStrike documentation
+This script automates image handling, configuration, and command generation. For detailed information, see the [CrowdStrike Cloud README](./crowdstrike/cloud/README.md).
 
-📚 **Detailed documentation:** [crowdstrike/cloud/README.md](crowdstrike/cloud/README.md)
+## Available Scripts
 
-### 🔍 Other CrowdStrike Utilities
+### 🛡️ CrowdStrike Falcon
 
-- **`crowdstrike/check-usermode.sh`** - Check usermode sensor status
+A set of utilities for managing the CrowdStrike Falcon Sensor.
 
-## 📁 Repository Structure
+| Path | Purpose |
+| --- | --- |
+| `crowdstrike/cloud/` | An interactive helper to install, upgrade, and uninstall the Falcon Sensor on Kubernetes via Helm. It handles image mirroring, configuration, and generates the necessary commands. See its [README](./crowdstrike/cloud/README.md) for full details. |
+| `crowdstrike/check-usermode.sh` | A shell script to verify that the CrowdStrike user-mode sensor is loaded and healthy on a Linux host. |
 
-```
-scripts/
-├── crowdstrike/           # CrowdStrike Falcon utilities
-│   ├── cloud/            # Kubernetes/Cloud deployment
-│   │   ├── deploy-sensors.sh
-│   │   ├── sensor-helm-install.py
-│   │   └── README.md
-│   └── check-usermode.sh # Usermode check
-├── LICENSE              # Apache 2.0 license
-└── README.md            # This file
-```
+## License
 
-## 🤝 Contributing
-
-If you want to contribute:
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Submit a pull request
-
-## 📄 License
-
-Apache License 2.0 - see [LICENSE](LICENSE) file for details.
-
-## ⚠️ Important
-
-- Always review scripts before running in production environments
-- Use at your own risk
+This repository is licensed under the Apache 2.0 License. See the [LICENSE](./LICENSE) file for details.
 
 ---
-
-**iIT Distribution** | 2025
+© 2025 iIT Distribution
